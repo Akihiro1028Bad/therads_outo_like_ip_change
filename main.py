@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 import time
 from cookie_manager import save_cookies, load_cookies, delete_cookies
 import random
-from proxy_manager import ProxyManager, setup_proxy_for_driver
+from proxy_manager import ProxyManager
 import zipfile
 import os
 from selenium.webdriver.common.proxy import Proxy, ProxyType
@@ -24,42 +24,38 @@ from selenium.webdriver.common.proxy import Proxy, ProxyType
 # ログの設定：日時、ログレベル、メッセージを表示
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def setup_driver(proxy=None):
+def setup_driver(proxy):
     """
     Chromeドライバーを設定し、初期化する関数
     
-    戻り値:
-    - driver: 設定済みのWebDriverオブジェクト
+    :param proxy: プロキシ設定 (形式: username:password:ip:port)
+    :return: 設定済みのWebDriverオブジェクト
     """
     chrome_options = Options()
-    # chrome_options.add_argument("--headless")  # ヘッドレスモードを使用する場合はコメントを外す
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     chrome_options.add_argument(f"user-agent={user_agent}")
 
     if proxy:
         proxy_parts = proxy.split(':')
         if len(proxy_parts) == 4:
-            proxy_address = f"{proxy_parts[2]}:{proxy_parts[3]}"
-            proxy_username = proxy_parts[0]
-            proxy_password = proxy_parts[1]
-
-            chrome_options.add_argument(f'--proxy-server={proxy_address}')
-
-            # プロキシ認証情報を設定
-            auth_extension_path = create_proxy_auth_extension(
-                proxy_parts[2], proxy_parts[3], proxy_username, proxy_password
+            username, password, ip, port = proxy_parts
+            
+            # プロキシ認証拡張機能を作成
+            plugin_path = create_proxy_auth_extension(
+                proxy_host=ip,
+                proxy_port=port,
+                proxy_username=username,
+                proxy_password=password
             )
-            chrome_options.add_extension(auth_extension_path)
+            chrome_options.add_extension(plugin_path)
 
-            logging.info(f"プロキシ設定を適用しました: {proxy_address}")
+            logging.info(f"プロキシ設定を適用しました: {ip}:{port}")
         else:
             logging.warning(f"無効なプロキシ形式です: {proxy}")
 
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
-    logging.info("Chromeドライバーを正常に設定しました。")
-    
     # プロキシ設定の確認
     try:
         driver.get("https://api.ipify.org")
@@ -73,7 +69,6 @@ def setup_driver(proxy=None):
     return driver
 
 def create_proxy_auth_extension(proxy_host, proxy_port, proxy_username, proxy_password, scheme='http', plugin_path=None):
-    """プロキシ認証用の Chrome 拡張機能を作成する"""
     if plugin_path is None:
         plugin_path = 'proxy_auth_plugin.zip'
 
@@ -164,7 +159,6 @@ def login_to_threads(driver, username, password):
                 return True
             else:
                 logging.info(f"ユーザー {username} のクッキーが無効です。通常のログインを試みます。")
-                delete_cookies(username)
                 driver.delete_all_cookies()
         
         # ユーザー名入力フィールドを待機し、入力
@@ -267,7 +261,7 @@ def get_recommended_posts(driver, username, num_posts=10):
             driver.get(url)
             if load_cookies(driver, username):
                 logging.info(f"ユーザー {username} のクッキーを正常にロードしました。")
-                time.sleep(20)
+                time.sleep(30)
             else:
                 logging.warning(f"ユーザー {username} のクッキーのロードに失敗しました。既存のセッションを使用します。")
 
@@ -275,13 +269,13 @@ def get_recommended_posts(driver, username, num_posts=10):
         if reload_counter % 10 == 0:
             driver.refresh()
             logging.info(f"ページをロード/リロードしました。現在の投稿数: {len(post_hrefs)}")
-            time.sleep(10)
+            time.sleep(30)
             last_height = driver.execute_script("return document.body.scrollHeight")
             reload_counter = 0
 
         # ページの最下部までスクロール
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(10)  # コンテンツの読み込みを待機
+        time.sleep(30)  # コンテンツの読み込みを待機
         
         # 新しい投稿URLを取得
         new_hrefs = get_post_hrefs(driver.page_source)
@@ -328,7 +322,7 @@ def get_post_hrefs(html_content):
             post_hrefs.append(href)
     return post_hrefs
 
-def click_all_like_buttons(driver, post_url, total_likes, login_username, max_scroll_attempts=5, scroll_pause_time=10):
+def click_all_like_buttons(driver, post_url, total_likes, login_username, max_scroll_attempts=5, scroll_pause_time=20):
     """
     指定された投稿ページ内のすべての「いいね！」ボタンをクリックする関数。
     
@@ -545,7 +539,7 @@ if __name__ == "__main__":
     max_delay = get_user_input("各アカウントの処理開始の最大遅延時間を指定してください（秒、0以上の整数）: ", min_value=0)
     accounts = load_accounts("accounts.json")
     if accounts:
-        proxy_manager = ProxyManager("proxies.txt", max_retries=3)  # 最大3回再試行
+        proxy_manager = ProxyManager()  # 最大3回再試行
         # バッチサイズを5に設定してアカウントを処理
         run_accounts_in_batches(accounts, batch_size=concurrent_count, proxy_manager=proxy_manager, max_delay=max_delay)
     else:

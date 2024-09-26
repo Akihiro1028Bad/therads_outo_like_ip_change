@@ -34,52 +34,43 @@ def load_accounts(file_path):
         logging.error(f"ファイル {file_path} の解析に失敗しました。JSONフォーマットを確認してください。")
         return []
 
-# process_account 関数を以下のように修正
-def process_account(account, proxy_manager):
+def process_account(account):
     username = account['username']
     password = account['password']
     num_likes = account.get('num_likes', 10)
+    proxy = account['proxy']
 
     logging.info(f"----------------------------------------")
     logging.info(f"ユーザ名：{username} ")
     logging.info(f"パスワード：{password} ")
     logging.info(f"投稿数：{num_likes} ")
+    logging.info(f"プロキシ：{proxy}")
     logging.info(f"----------------------------------------")
 
-    for attempt in range(proxy_manager.max_retries):
-        proxy = proxy_manager.get_random_proxy()
-        if not proxy:
-            logging.error(f"アカウント {username}: 利用可能なプロキシがありません。処理をスキップします。")
-            return 0, "プロキシなし"
+    driver = setup_driver(proxy)
+    try:
+        driver.set_page_load_timeout(60)
+        if login_to_threads(driver, username, password):
+            post_urls = get_recommended_posts(driver, username, num_likes)
+            success, likes_count = auto_like_comments_on_posts(driver, post_urls, username)
 
-        logging.info(f"アカウント {username} の処理を開始します。プロキシ: {proxy}")
-
-        driver = setup_driver(proxy)
-        try:
-            driver.set_page_load_timeout(60)  # ページロードのタイムアウトを30秒に設定
-            if login_to_threads(driver, username, password):
-                post_urls = get_recommended_posts(driver, username, num_likes)
-                success, likes_count = auto_like_comments_on_posts(driver, post_urls, account['username'])
-
-                if not success:
-                    logging.info(f"アカウント {username}: 制限が検知されたため、処理を終了します。")
-                    save_cookies(driver, username)
-                    return likes_count, "制限検知"
-                else:
-                    logging.info(f"アカウント {username}: 処理が正常に完了しました。合計 {likes_count} 件のいいねを行いました。")
-                    save_cookies(driver, username)
-                    return likes_count, "処理成功"
+            if not success:
+                logging.info(f"アカウント {username}: 制限が検知されたため、処理を終了します。")
+                save_cookies(driver, username)
+                return likes_count, "制限検知"
             else:
-                logging.error(f"アカウント {username}: ログインに失敗したため、自動「いいね」を実行できません。")
-                continue  # 次のプロキシを試す
-        except Exception as e:
-            logging.error(f"アカウント {username}: 予期せぬエラーが発生しました: {e}")
-            continue  # 次のプロキシを試す
-        finally:
-            driver.quit()
-            logging.info(f"アカウント {username}: ブラウザを終了しました。")
-
-    return 0, "処理失敗"  # すべての試行が失敗した場合
+                logging.info(f"アカウント {username}: 処理が正常に完了しました。合計 {likes_count} 件のいいねを行いました。")
+                save_cookies(driver, username)
+                return likes_count, "処理成功"
+        else:
+            logging.error(f"アカウント {username}: ログインに失敗したため、自動「いいね」を実行できません。")
+            return 0, "ログイン失敗"
+    except Exception as e:
+        logging.error(f"アカウント {username}: 予期せぬエラーが発生しました: {e}")
+        return 0, "処理失敗"
+    finally:
+        driver.quit()
+        logging.info(f"アカウント {username}: ブラウザを終了しました。")
 
 def process_account_with_delay(account, proxy_manager, delay):
     """
@@ -92,7 +83,7 @@ def process_account_with_delay(account, proxy_manager, delay):
     """
     logging.info(f"アカウント {account['username']} の処理を {delay:.2f} 秒後に開始します。")
     time.sleep(delay)
-    return process_account(account, proxy_manager)
+    return process_account(account)
 
 def process_account_batch(batch, proxy_manager, max_delay=30):
     """
