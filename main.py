@@ -35,6 +35,9 @@ def setup_driver(proxy):
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     chrome_options.add_argument(f"user-agent={user_agent}")
 
+    # ヘッドレスモードを有効化
+    chrome_options.add_argument("--headless")
+
     if proxy:
         proxy_parts = proxy.split(':')
         if len(proxy_parts) == 4:
@@ -546,3 +549,5 @@ if __name__ == "__main__":
         logging.error("アカウント情報の読み込みに失敗しました。処理を終了します。")
 
     input("Enterキーを押して終了してください...")  # コマンドプロンプトを開いたままにする
+
+    
