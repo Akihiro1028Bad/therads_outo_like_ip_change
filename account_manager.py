@@ -10,6 +10,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from selenium.common.exceptions import WebDriverException
 
 
 # ロギングの設定
@@ -34,6 +35,13 @@ def load_accounts(file_path):
         logging.error(f"ファイル {file_path} の解析に失敗しました。JSONフォーマットを確認してください。")
         return []
 
+# account_manager.py
+
+import logging
+from main import HTTP_429_TOO_MANY_REQUESTS
+
+# ... (既存のインポート文は省略)
+
 def process_account(account):
     username = account['username']
     password = account['password']
@@ -41,7 +49,7 @@ def process_account(account):
     proxy = account['proxy']
 
     logging.info(f"----------------------------------------")
-    logging.info(f"ユーザ名：{username} ")
+    logging.info(f"ユーザー名：{username} ")
     logging.info(f"パスワード：{password} ")
     logging.info(f"投稿数：{num_likes} ")
     logging.info(f"プロキシ：{proxy}")
@@ -54,7 +62,10 @@ def process_account(account):
             post_urls = get_recommended_posts(driver, username, num_likes)
             success, likes_count = auto_like_comments_on_posts(driver, post_urls, username)
 
-            if not success:
+            if success == HTTP_429_TOO_MANY_REQUESTS:
+                logging.error(f"アカウント {username}: 429エラー (Too Many Requests) が検出されたため、処理を中止します。")
+                return likes_count, "429エラー"
+            elif not success:
                 logging.info(f"アカウント {username}: 制限が検知されたため、処理を終了します。")
                 save_cookies(driver, username)
                 return likes_count, "制限検知"
@@ -71,6 +82,45 @@ def process_account(account):
     finally:
         driver.quit()
         logging.info(f"アカウント {username}: ブラウザを終了しました。")
+
+def display_all_results(results):
+    """
+    全アカウントの処理結果を表示する関数
+
+    :param results: アカウントごとの処理結果を含む辞書
+    """
+    logging.info("=" * 70)
+    logging.info("全アカウントの処理結果:")
+    logging.info("=" * 70)
+    logging.info(f"{'アカウント':<20} {'状態':<15} {'いいね数':<10}")
+    logging.info("-" * 70)
+    
+    total_likes = 0
+    total_restricted = 0
+    total_failed = 0
+    total_429_errors = 0
+    
+    for username, result in results.items():
+        status = result['status']
+        likes = result['likes']
+        
+        if status == "制限検知":
+            total_restricted += 1
+        elif status == "処理失敗":
+            total_failed += 1
+        elif status == "429エラー":
+            total_429_errors += 1
+        
+        total_likes += likes
+        
+        logging.info(f"{username:<20} {status:<15} {likes:<10}")
+    
+    logging.info("=" * 70)
+    logging.info(f"総いいね数: {total_likes}")
+    logging.info(f"制限検知アカウント数: {total_restricted}")
+    logging.info(f"処理失敗アカウント数: {total_failed}")
+    logging.info(f"429エラーアカウント数: {total_429_errors}")
+    logging.info("=" * 70)
 
 def process_account_with_delay(account, proxy_manager, delay):
     """

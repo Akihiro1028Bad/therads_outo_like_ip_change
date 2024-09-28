@@ -10,7 +10,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException, WebDriverException
 from bs4 import BeautifulSoup
 import time
 from cookie_manager import save_cookies, load_cookies, delete_cookies
@@ -18,8 +18,12 @@ import random
 from proxy_manager import ProxyManager
 import zipfile
 import os
+import requests
+import json
 from selenium.webdriver.common.proxy import Proxy, ProxyType
 
+# 429エラーを示す定数を定義
+HTTP_429_TOO_MANY_REQUESTS = 429
 
 # ログの設定：日時、ログレベル、メッセージを表示
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -36,7 +40,7 @@ def setup_driver(proxy):
     chrome_options.add_argument(f"user-agent={user_agent}")
 
     # ヘッドレスモードを有効化
-    chrome_options.add_argument("--headless")
+    #chrome_options.add_argument("--headless")
 
     if proxy:
         proxy_parts = proxy.split(':')
@@ -57,6 +61,7 @@ def setup_driver(proxy):
             logging.warning(f"無効なプロキシ形式です: {proxy}")
 
     service = Service(ChromeDriverManager().install())
+
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     # プロキシ設定の確認
@@ -132,6 +137,23 @@ def create_proxy_auth_extension(proxy_host, proxy_port, proxy_username, proxy_pa
         zp.writestr("background.js", background_js)
 
     return plugin_path
+
+def check_for_429_error(url):
+    """
+    指定されたURLに対して429エラーが発生しているかチェックする関数
+    
+    :param url: チェック対象のURL
+    :return: 429エラーが検出された場合はTrue、それ以外はFalse
+    """
+    try:
+        response = requests.get(url, allow_redirects=False)
+        if response.status_code == 429:
+            logging.warning(f"429 エラー (リクエスト過多) が検出されました。URL: {url}")
+            return True
+        return False
+    except RequestException as e:
+        logging.error(f"リクエスト中にエラーが発生しました: {str(e)}")
+        return False
 
 def login_to_threads(driver, username, password):
     """
@@ -349,6 +371,11 @@ def click_all_like_buttons(driver, post_url, total_likes, login_username, max_sc
     try:
         driver.get(new_post_url)
         logging.info(f"アカウント {login_username}:投稿ページにアクセスしています: {new_post_url}")
+
+        # 429エラーのチェックを追加
+        if check_for_429_error(new_post_url):
+            logging.error(f"アカウント {login_username}: 429エラーが検出されたため、処理を中止します。")
+            return HTTP_429_TOO_MANY_REQUESTS
 
         # ページの読み込みを待機（タイムアウト処理付き）
         try:
