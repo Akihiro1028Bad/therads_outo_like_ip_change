@@ -43,7 +43,7 @@ from main import HTTP_429_TOO_MANY_REQUESTS
 
 # ... (既存のインポート文は省略)
 
-def process_account(account):
+def process_account(account, headless_mode):
     username = account['username']
     password = account['password']
     num_likes = account.get('num_likes', 10)
@@ -56,7 +56,9 @@ def process_account(account):
     logging.info(f"プロキシ：{proxy}")
     logging.info(f"----------------------------------------")
 
-    driver = setup_driver(proxy)
+    logging.info(f"Processing account with headless_mode: {headless_mode}")
+
+    driver = setup_driver(proxy, headless_mode)
     try:
         driver.set_page_load_timeout(60)
         if login_to_threads(driver, username, password):
@@ -125,7 +127,7 @@ def display_all_results(results):
     logging.info(f"ログイン失敗アカウント数: {login_errors}")
     logging.info("=" * 70)
 
-def process_account_with_delay(account, proxy_manager, delay):
+def process_account_with_delay(account, headless_mode, delay):
     """
     遅延を加えてアカウントを処理する関数
 
@@ -136,9 +138,9 @@ def process_account_with_delay(account, proxy_manager, delay):
     """
     logging.info(f"アカウント {account['username']} の処理を {delay:.2f} 秒後に開始します。")
     time.sleep(delay)
-    return process_account(account)
+    return process_account(account, headless_mode)
 
-def process_account_batch(batch, proxy_manager, max_delay=30):
+def process_account_batch(batch, headless_mode, max_delay=30):
     """
     アカウントのバッチを並列処理する関数（各アカウントの開始をずらす）
 
@@ -153,8 +155,8 @@ def process_account_batch(batch, proxy_manager, max_delay=30):
             executor.submit(
                 process_account_with_delay, 
                 account, 
-                proxy_manager, 
-                random.uniform(0, max_delay)
+                headless_mode,
+                random.uniform(0, max_delay),
             ): account for account in batch
         }
         for future in as_completed(future_to_account):
@@ -214,7 +216,7 @@ def display_all_results(results):
     logging.info(f"ログイン失敗アカウント数: {total_login_error}")
     logging.info("=" * 70)
 
-def run_accounts_in_batches(accounts, batch_size=5, proxy_manager=None, max_delay=30):
+def run_accounts_in_batches(accounts, headless_mode, batch_size=5, proxy_manager=None, max_delay=30):
     """
     アカウントを指定された同時処理数で並列実行する関数
 
@@ -231,7 +233,7 @@ def run_accounts_in_batches(accounts, batch_size=5, proxy_manager=None, max_dela
         batch = accounts[i:i+batch_size]
         logging.info(f"処理を開始します。全{total_accounts}アカウント、バッチサイズ: {batch_size}")
         try:
-            batch_results = process_account_batch(batch, proxy_manager, max_delay)
+            batch_results = process_account_batch(batch, headless_mode, max_delay)
             results.update(batch_results)
 
             for username, result in batch_results.items():

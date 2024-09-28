@@ -29,7 +29,7 @@ HTTP_429_TOO_MANY_REQUESTS = 429
 # ログの設定：日時、ログレベル、メッセージを表示
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def setup_driver(proxy):
+def setup_driver(proxy, headless_mode):
     """
     Chromeドライバーを設定し、初期化する関数
     
@@ -39,9 +39,13 @@ def setup_driver(proxy):
     chrome_options = Options()
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     chrome_options.add_argument(f"user-agent={user_agent}")
-
-    # ヘッドレスモードを有効化
-    #chrome_options.add_argument("--headless")
+    
+    logging.info(f"Headless mode value: {headless_mode}")  # この行を追加
+    if headless_mode:
+        chrome_options.add_argument("--headless")
+        logging.info("ヘッドレスモードが有効化されました。")
+    else:
+        logging.info("通常モードで実行します。")
 
     if proxy:
         proxy_parts = proxy.split(':')
@@ -561,6 +565,21 @@ def get_user_input(prompt, value_type=int, min_value=1):
         except ValueError:
             print("有効な値を入力してください。")
 
+def get_user_input_headless(prompt, value_type=str):
+    while True:
+        try:
+            user_input = input(prompt).strip()
+            if value_type == bool:
+                if user_input.lower() in ['y', 'yes']:
+                    return True
+                elif user_input.lower() in ['n', 'no']:
+                    return False
+                else:
+                    raise ValueError
+            return value_type(user_input)
+        except ValueError:
+            print("無効な入力です。もう一度お試しください。")
+
 if __name__ == "__main__":
     import sys
     #if len(sys.argv) > 1 and sys.argv[1] == "--multi":
@@ -575,11 +594,13 @@ if __name__ == "__main__":
     # ユーザーに同時処理数を入力させる
     concurrent_count = get_user_input("同時処理数を指定してください（1以上の整数）: ")
     max_delay = get_user_input("各アカウントの処理開始の最大遅延時間を指定してください（秒、0以上の整数）: ", min_value=0)
+    # ヘッドレスモードの選択
+    headless_mode = get_user_input_headless("ヘッドレスモードを有効にしますか？ (y/n): ", bool)
     accounts = load_accounts("accounts.json")
     if accounts:
         proxy_manager = ProxyManager()  # 最大3回再試行
         # バッチサイズを5に設定してアカウントを処理
-        run_accounts_in_batches(accounts, batch_size=concurrent_count, proxy_manager=proxy_manager, max_delay=max_delay)
+        run_accounts_in_batches(accounts, headless_mode, batch_size=concurrent_count, proxy_manager=proxy_manager, max_delay=max_delay)
     else:
         logging.error("アカウント情報の読み込みに失敗しました。処理を終了します。")
 
