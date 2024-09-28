@@ -21,6 +21,7 @@ import os
 import requests
 import json
 from selenium.webdriver.common.proxy import Proxy, ProxyType
+from result_manager import ResultManager
 
 # 429エラーを示す定数を定義
 HTTP_429_TOO_MANY_REQUESTS = 429
@@ -193,49 +194,43 @@ def login_to_threads(driver, username, password):
                 logging.info(f"ユーザー {username} はクッキーを使用して正常にログインしました。")
                 return True
             else:
-                logging.info(f"ユーザー {username} のクッキーが無効です。通常のログインを試みます。")
-                driver.delete_all_cookies()
+                logging.info(f"ユーザー {username} のクッキーが無効です。処理を終了します。")
+                return False
         
         # ユーザー名入力フィールドを待機し、入力
-        username_field = WebDriverWait(driver, 60).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text'][class*='x1i10hfl'][class*='x1a2a7pz']"))
-        )
-        username_field.clear()
-        username_field.send_keys(username)
-        logging.info("ユーザー名を入力しました")
+        #username_field = WebDriverWait(driver, 60).until(
+            #EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text'][class*='x1i10hfl'][class*='x1a2a7pz']"))
+        #)
+        #username_field.clear()
+        #username_field.send_keys(username)
+        #logging.info("ユーザー名を入力しました")
         
         # パスワード入力フィールドを見つけ、入力
-        password_field = driver.find_element(By.CSS_SELECTOR, "input[type='password']")
-        password_field.clear()
-        password_field.send_keys(password)
-        logging.info("パスワードを入力しました")
+        #password_field = driver.find_element(By.CSS_SELECTOR, "input[type='password']")
+        #password_field.clear()
+        #password_field.send_keys(password)
+        #logging.info("パスワードを入力しました")
         
         # 入力後、短い待機時間を設定
-        time.sleep(2)
+        #time.sleep(2)
         
         # ログインボタンを見つけてクリック
-        login_button_xpath = "//div[@role='button' and contains(@class, 'x1i10hfl') and contains(@class, 'x1qjc9v5')]//div[contains(text(), 'Log in') or contains(text(), 'ログイン')]"
-        login_button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, login_button_xpath))
-        )
-        driver.execute_script("arguments[0].click();", login_button)
-        logging.info("ログインボタンをクリックしました")
+        #login_button_xpath = "//div[@role='button' and contains(@class, 'x1i10hfl') and contains(@class, 'x1qjc9v5')]//div[contains(text(), 'Log in') or contains(text(), 'ログイン')]"
+        #login_button = WebDriverWait(driver, 10).until(
+            #EC.element_to_be_clickable((By.XPATH, login_button_xpath))
+        #)
+        #driver.execute_script("arguments[0].click();", login_button)
+        #logging.info("ログインボタンをクリックしました")
 
-        time.sleep(20)
+        #time.sleep(20)
         
         # ページの読み込みを待機
-        WebDriverWait(driver, 120).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
-        logging.info("ログインが完了し、ページが正常に読み込まれました")
+        #WebDriverWait(driver, 120).until(
+            #EC.presence_of_element_located((By.TAG_NAME, "body"))
+        #)
+        #logging.info("ログインが完了し、ページが正常に読み込まれました")
 
-        time.sleep(5)
-        
-        # ログイン成功後、クッキーを保存
-        save_cookies(driver, username)
-        logging.info(f"ユーザー {username} のログインセッションのクッキーを保存しました")
-        
-        return True
+        #time.sleep(5)
     except Exception as e:
         logging.error(f"ログイン処理中にエラーが発生しました: {e}")
         return False

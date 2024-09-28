@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from selenium.common.exceptions import WebDriverException
+from result_manager import ResultManager
 
 
 # ロギングの設定
@@ -64,19 +65,19 @@ def process_account(account):
 
             if success == HTTP_429_TOO_MANY_REQUESTS:
                 logging.error(f"アカウント {username}: 429エラー (Too Many Requests) が検出されたため、処理を中止します。")
-                return likes_count, "429エラー"
+                return likes_count, "429エラー", proxy
             elif not success:
                 logging.info(f"アカウント {username}: 制限が検知されたため、処理を終了します。")
-                return likes_count, "制限検知"
+                return likes_count, "制限検知", proxy
             else:
                 logging.info(f"アカウント {username}: 処理が正常に完了しました。合計 {likes_count} 件のいいねを行いました。")
-                return likes_count, "処理成功"
+                return likes_count, "処理成功", proxy
         else:
             logging.error(f"アカウント {username}: ログインに失敗したため、自動「いいね」を実行できません。")
-            return 0, "ログイン失敗"
+            return 0, "ログイン失敗", proxy
     except Exception as e:
         logging.error(f"アカウント {username}: 予期せぬエラーが発生しました: {e}")
-        return 0, "処理失敗"
+        return 0, "処理失敗", proxy
     finally:
         driver.quit()
         logging.info(f"アカウント {username}: ブラウザを終了しました。")
@@ -97,6 +98,7 @@ def display_all_results(results):
     total_restricted = 0
     total_failed = 0
     total_429_errors = 0
+    login_errors = 0
     
     for username, result in results.items():
         status = result['status']
@@ -108,6 +110,8 @@ def display_all_results(results):
             total_failed += 1
         elif status == "429エラー":
             total_429_errors += 1
+        elif status == "ログイン失敗":
+            login_errors += 1
         
         total_likes += likes
         
@@ -118,6 +122,7 @@ def display_all_results(results):
     logging.info(f"制限検知アカウント数: {total_restricted}")
     logging.info(f"処理失敗アカウント数: {total_failed}")
     logging.info(f"429エラーアカウント数: {total_429_errors}")
+    logging.info(f"ログイン失敗アカウント数: {login_errors}")
     logging.info("=" * 70)
 
 def process_account_with_delay(account, proxy_manager, delay):
@@ -155,8 +160,8 @@ def process_account_batch(batch, proxy_manager, max_delay=30):
         for future in as_completed(future_to_account):
             account = future_to_account[future]
             try:
-                likes_count, status = future.result()
-                batch_results[account['username']] = {"likes": likes_count, "status": status}
+                likes_count, status, proxy = future.result()  # プロキシ情報を受け取る
+                batch_results[account['username']] = {"likes": likes_count, "status": status, "proxy": proxy}
             except Exception as e:
                 logging.error(f"アカウント {account['username']} の処理中に予期せぬエラーが発生しました: {str(e)}")
                 batch_results[account['username']] = {"likes": 0, "status": "処理失敗"}
@@ -176,7 +181,10 @@ def display_all_results(results):
     
     total_likes = 0
     total_restricted = 0
+    toral_success = 0
     total_failed = 0
+    total_login_error = 0
+    count_429_error = 0
     
     for username, result in results.items():
         status = result['status']
@@ -185,9 +193,15 @@ def display_all_results(results):
         if status == "制限検知":
             total_restricted += 1
             total_likes += likes
+        elif status == "処理成功":
+            toral_success += 1
         elif status == "処理失敗":
             total_failed += 1
             total_likes += likes
+        elif status == "ログイン失敗":
+            total_login_error += 1
+        elif status == "429エラー":
+            count_429_error += 1
         else:
             total_likes += likes
         
@@ -197,6 +211,7 @@ def display_all_results(results):
     logging.info(f"総いいね数: {total_likes}")
     logging.info(f"制限検知アカウント数: {total_restricted}")
     logging.info(f"処理失敗アカウント数: {total_failed}")
+    logging.info(f"ログイン失敗アカウント数: {total_login_error}")
     logging.info("=" * 70)
 
 def run_accounts_in_batches(accounts, batch_size=5, proxy_manager=None, max_delay=30):
@@ -209,14 +224,23 @@ def run_accounts_in_batches(accounts, batch_size=5, proxy_manager=None, max_dela
     :param max_delay: 各アカウントの処理開始の最大遅延時間（秒）
     """
     total_accounts = len(accounts)
+    result_manager = ResultManager()
     results = {}
 
     for i in range(0, total_accounts, batch_size):
         batch = accounts[i:i+batch_size]
-        logging.info(f"処理開始: アカウント {i+1} から {min(i+batch_size, total_accounts)} まで（全 {total_accounts} アカウント中）")
+        logging.info(f"処理を開始します。全{total_accounts}アカウント、バッチサイズ: {batch_size}")
         try:
             batch_results = process_account_batch(batch, proxy_manager, max_delay)
             results.update(batch_results)
+
+            for username, result in batch_results.items():
+                result_manager.add_result(
+                    username=username,
+                    status=result['status'],
+                    proxy=result['proxy'],  # バッチ結果からプロキシ情報を取得
+                    likes_count=result['likes']
+                )
         except Exception as e:
             logging.error(f"処理中に予期せぬエラーが発生しました: {str(e)}")
         
@@ -228,5 +252,9 @@ def run_accounts_in_batches(accounts, batch_size=5, proxy_manager=None, max_dela
             time.sleep(wait_time)
 
     display_all_results(results)
+
+    result_manager.set_end_time()
+    result_manager.save_to_excel()
+    logging.info("すべての処理が完了し、結果をExcelファイルに保存しました。")
 
         
