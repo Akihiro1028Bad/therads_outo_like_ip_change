@@ -138,22 +138,32 @@ def create_proxy_auth_extension(proxy_host, proxy_port, proxy_username, proxy_pa
 
     return plugin_path
 
-def check_for_429_error(url):
+def check_for_429_error(driver, timeout=10):
     """
-    指定されたURLに対して429エラーが発生しているかチェックする関数
+    Threadsの429エラーページを確実に検出する関数
     
-    :param url: チェック対象のURL
+    :param driver: Seleniumのwebdriverオブジェクト
+    :param timeout: タイムアウト時間（秒）
     :return: 429エラーが検出された場合はTrue、それ以外はFalse
     """
     try:
-        response = requests.get(url, allow_redirects=False)
-        if response.status_code == 429:
-            logging.warning(f"429 エラー (リクエスト過多) が検出されました。URL: {url}")
+        # 1. エラーメッセージの検出
+        error_message = WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.XPATH, 
+                "//*[contains(text(), 'このページは動作していません')]"
+            ))
+        )
+        
+        # 2. HTTP ERROR 429の検出
+        error_code = driver.find_element(By.XPATH, "//*[contains(text(), 'HTTP ERROR 429')]")
+        
+        if error_message and error_code:
+            logging.error("429エラーページが検出されました。")
             return True
+    except (TimeoutException, NoSuchElementException):
         return False
-    except RequestException as e:
-        logging.error(f"リクエスト中にエラーが発生しました: {str(e)}")
-        return False
+
+    return False
 
 def login_to_threads(driver, username, password):
     """
@@ -373,7 +383,7 @@ def click_all_like_buttons(driver, post_url, total_likes, login_username, max_sc
         logging.info(f"アカウント {login_username}:投稿ページにアクセスしています: {new_post_url}")
 
         # 429エラーのチェックを追加
-        if check_for_429_error(new_post_url):
+        if check_for_429_error(driver):
             logging.error(f"アカウント {login_username}: 429エラーが検出されたため、処理を中止します。")
             return HTTP_429_TOO_MANY_REQUESTS
 
@@ -493,6 +503,9 @@ def auto_like_comments_on_posts(driver, post_urls, login_username, delay=2):
         logging.info(f"アカウント {login_username}:処理中: {index}/{total_posts} - {url}")
         
         likes = click_all_like_buttons(driver, url, total_likes, login_username)
+
+        if likes == HTTP_429_TOO_MANY_REQUESTS:
+            return HTTP_429_TOO_MANY_REQUESTS, total_likes
         
         if likes == -1:  # 制限が検知された場合
             return False, total_likes  # メイン関数に制限を通知

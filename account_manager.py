@@ -67,11 +67,9 @@ def process_account(account):
                 return likes_count, "429エラー"
             elif not success:
                 logging.info(f"アカウント {username}: 制限が検知されたため、処理を終了します。")
-                save_cookies(driver, username)
                 return likes_count, "制限検知"
             else:
                 logging.info(f"アカウント {username}: 処理が正常に完了しました。合計 {likes_count} 件のいいねを行いました。")
-                save_cookies(driver, username)
                 return likes_count, "処理成功"
         else:
             logging.error(f"アカウント {username}: ログインに失敗したため、自動「いいね」を実行できません。")
