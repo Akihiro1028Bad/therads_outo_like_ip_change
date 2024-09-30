@@ -25,7 +25,7 @@ class ResultManager:
             "429エラー": "FFD700"  # オレンジ色
         }
 
-    def add_result(self, username, status, proxy, likes_count):
+    def add_result(self, username, status, proxy, likes_count, follower_count):
         """
         処理結果を追加する
         
@@ -38,7 +38,8 @@ class ResultManager:
             'username': username,
             'status': status,
             'proxy': proxy,
-            'likes_count': likes_count
+            'likes_count': likes_count,
+            'follower_count': follower_count
         })
         self.total_likes += likes_count
 
@@ -140,7 +141,7 @@ class ResultManager:
 
     def _write_details(self, sheet):
         """詳細データを書き込む"""
-        headers = ['ユーザー名', 'ステータス', 'プロキシ', 'いいね数']
+        headers = ['ユーザー名', 'ステータス', 'プロキシ', 'いいね数', 'フォロワー数']
         start_row = 10  # サマリー情報の後に空白行を入れて詳細データを開始
 
         # ヘッダーの背景色を設定（薄い青色）
@@ -157,6 +158,7 @@ class ResultManager:
             status_cell = sheet.cell(row=row, column=2, value=result['status'])
             sheet.cell(row=row, column=3, value=result['proxy'])
             sheet.cell(row=row, column=4, value=result['likes_count'])
+            sheet.cell(row=row, column=5, value=result['follower_count'])
 
         # ステータスに応じてセルの背景色を設定
             if result['status'] in self.status_colors:

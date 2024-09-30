@@ -1,6 +1,6 @@
 import json
 import threading
-from main import setup_driver, login_to_threads, get_recommended_posts, auto_like_comments_on_posts
+from main import setup_driver, login_to_threads, get_recommended_posts, auto_like_comments_on_posts, get_follower_count, HTTP_429_TOO_MANY_REQUESTS
 import logging
 from cookie_manager import save_cookies, load_cookies, delete_cookies
 import time
@@ -61,25 +61,31 @@ def process_account(account, headless_mode):
     driver = setup_driver(proxy, headless_mode)
     try:
         driver.set_page_load_timeout(60)
+        follower_count = None  # この行を追加
         if login_to_threads(driver, username, password):
+
+            # フォロワー数を取得
+            follower_count = get_follower_count(driver, username)
+            logging.info(f"アカウント {username} のフォロワー数: {follower_count}")
+
             post_urls = get_recommended_posts(driver, username, num_likes)
             success, likes_count = auto_like_comments_on_posts(driver, post_urls, username)
 
             if success == HTTP_429_TOO_MANY_REQUESTS:
                 logging.error(f"アカウント {username}: 429エラー (Too Many Requests) が検出されたため、処理を中止します。")
-                return likes_count, "429エラー", proxy
+                return likes_count, "429エラー", proxy, follower_count
             elif not success:
                 logging.info(f"アカウント {username}: 制限が検知されたため、処理を終了します。")
-                return likes_count, "制限検知", proxy
+                return likes_count, "制限検知", proxy, follower_count
             else:
                 logging.info(f"アカウント {username}: 処理が正常に完了しました。合計 {likes_count} 件のいいねを行いました。")
-                return likes_count, "処理成功", proxy
+                return likes_count, "処理成功", proxy, follower_count
         else:
             logging.error(f"アカウント {username}: ログインに失敗したため、自動「いいね」を実行できません。")
-            return 0, "ログイン失敗", proxy
+            return 0, "ログイン失敗", proxy, follower_count
     except Exception as e:
         logging.error(f"アカウント {username}: 予期せぬエラーが発生しました: {e}")
-        return 0, "処理失敗", proxy
+        return 0, "処理失敗", proxy, follower_count
     finally:
         driver.quit()
         logging.info(f"アカウント {username}: ブラウザを終了しました。")
@@ -162,11 +168,11 @@ def process_account_batch(batch, headless_mode, max_delay=30):
         for future in as_completed(future_to_account):
             account = future_to_account[future]
             try:
-                likes_count, status, proxy = future.result()  # プロキシ情報を受け取る
-                batch_results[account['username']] = {"likes": likes_count, "status": status, "proxy": proxy}
+                likes_count, status, proxy, follower_count = future.result()  # プロキシ情報を受け取る
+                batch_results[account['username']] = {"likes": likes_count, "status": status, "proxy": proxy, "follower_count": follower_count}
             except Exception as e:
                 logging.error(f"アカウント {account['username']} の処理中に予期せぬエラーが発生しました: {str(e)}")
-                batch_results[account['username']] = {"likes": 0, "status": "処理失敗"}
+                batch_results[account['username']] = {"likes": 0, "status": "処理失敗", "proxy": proxy, "follower_count": follower_count}
     return batch_results
 
 def display_all_results(results):
@@ -241,7 +247,8 @@ def run_accounts_in_batches(accounts, headless_mode, batch_size=5, proxy_manager
                     username=username,
                     status=result['status'],
                     proxy=result['proxy'],  # バッチ結果からプロキシ情報を取得
-                    likes_count=result['likes']
+                    likes_count=result['likes'],
+                    follower_count=result.get('follower_count', None)  # フォロワー数を追加
                 )
         except Exception as e:
             logging.error(f"処理中に予期せぬエラーが発生しました: {str(e)}")

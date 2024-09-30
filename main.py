@@ -22,6 +22,8 @@ import requests
 import json
 from selenium.webdriver.common.proxy import Proxy, ProxyType
 from result_manager import ResultManager
+import re
+
 
 # 429エラーを示す定数を定義
 HTTP_429_TOO_MANY_REQUESTS = 429
@@ -336,6 +338,61 @@ def get_recommended_posts(driver, username, num_posts=10):
         logging.info(f"{i}. https://www.threads.net{href}")
         
     return post_hrefs[:num_posts]
+
+def get_follower_count(driver, username):
+    """
+    ユーザーのフォロワー数を取得する関数
+    
+    :param driver: WebDriverオブジェクト
+    :param username: 対象ユーザーのユーザー名
+    :return: フォロワー数（整数）、取得に失敗した場合は None
+    """
+    logging.info(f"アカウント {username} のフォロワー数取得を開始します。")
+    follower_text = None
+    follower_count = None
+    
+    try:
+        # プロフィールページにアクセス
+        profile_url = f"https://www.threads.net/@{username}"
+        driver.get(profile_url)
+        logging.info(f"アカウント {username} のプロフィールページにアクセスしました: {profile_url}")
+
+        # フォロワー数を含む要素を待機して取得（英語と日本語に対応）
+        follower_element = WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.XPATH, "//span[contains(@class, 'x1lliihq') and (contains(text(), 'followers') or contains(text(), 'フォロワー'))]"))
+        )
+        
+        # フォロワー数を取得
+        follower_text = follower_element.get_attribute('title')
+        if not follower_text:
+            follower_text = follower_element.text
+        
+        logging.info(f"アカウント {username} のフォロワー情報を取得: {follower_text}")
+
+        # フォロワー数を抽出して整数に変換
+        match = re.search(r'\d+', follower_text.replace(',', ''))
+        if match:
+            follower_count = int(match.group())
+            logging.info(f"アカウント {username} のフォロワー数: {follower_count}")
+        else:
+            logging.error(f"アカウント {username} のフォロワー数の解析に失敗しました。取得したテキスト: {follower_text}")
+    
+    except TimeoutException:
+        logging.error(f"アカウント {username} のフォロワー数取得中にタイムアウトが発生しました。")
+    except NoSuchElementException:
+        logging.error(f"アカウント {username} のフォロワー数を含む要素が見つかりませんでした。")
+    except Exception as e:
+        logging.error(f"アカウント {username} のフォロワー数取得中に予期せぬエラーが発生しました: {str(e)}")
+    
+    finally:
+        if follower_text:
+            logging.info(f"取得したフォロワーテキスト: {follower_text}")
+        if follower_count is not None:
+            logging.info(f"最終的に取得したフォロワー数: {follower_count}")
+        else:
+            logging.warning(f"アカウント {username} のフォロワー数取得に失敗しました。")
+    
+    return follower_count
 
 def get_post_hrefs(html_content):
     """
