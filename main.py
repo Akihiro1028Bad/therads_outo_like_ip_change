@@ -192,12 +192,21 @@ def login_to_threads(driver, username, password):
         logging.info(f"引数ユーザ名情報: {username}")
         logging.info(f"引数パスワード情報: {password}")
 
+        # ポップアップのチェックと閉じる
+        check_and_close_popup(driver)
+
         # 保存されたクッキーをロード
         if load_cookies(driver, username):
             driver.get(url)
+
+            # ポップアップのチェックと閉じる
+            check_and_close_popup(driver)
+
             # クッキーでのログインが成功したかチェック
             if check_login_status(driver):
                 logging.info(f"ユーザー {username} はクッキーを使用して正常にログインしました。")
+
+                
                 return True
             else:
                 logging.info(f"ユーザー {username} のクッキーが無効です。処理を終了します。")
@@ -274,6 +283,27 @@ def check_login_status(driver, timeout=120):
         logging.info("ログアウト状態であると判断します。")
         return False
 
+def check_and_close_popup(driver, timeout=30):
+    """
+    ポップアップを検出し、「閉じる」ボタンをクリックする関数
+    """
+    try:
+        logging.info("自動化ポップアップのチェックをします。")
+
+        # ポップアップの検出
+        popup = WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.XPATH, "//span[contains(text(), 'あなたのアカウントで自動化された操作があったことが疑われます')]"))
+        )
+        
+        # 「閉じる」ボタンの検出とクリック
+        close_button = driver.find_element(By.XPATH, "//div[@role='button' and @aria-label='閉じる']")
+        close_button.click()
+        logging.info("自動化ポップアップを検出し、閉じました。")
+        return True
+    except (TimeoutException, NoSuchElementException):
+        logging.info("自動化ポップアップは検出されませんでした。")
+        return False
+
 def get_recommended_posts(driver, username, num_posts=10):
     """
     おすすめ投稿を取得する関数
@@ -297,6 +327,8 @@ def get_recommended_posts(driver, username, num_posts=10):
             driver.get(url)
             if load_cookies(driver, username):
                 logging.info(f"ユーザー {username} のクッキーを正常にロードしました。")
+                # ポップアップのチェックと閉じる
+                check_and_close_popup(driver)
                 time.sleep(30)
             else:
                 logging.warning(f"ユーザー {username} のクッキーのロードに失敗しました。既存のセッションを使用します。")
@@ -305,7 +337,11 @@ def get_recommended_posts(driver, username, num_posts=10):
         if reload_counter % 10 == 0:
             driver.refresh()
             logging.info(f"ページをロード/リロードしました。現在の投稿数: {len(post_hrefs)}")
+
+            # ポップアップのチェックと閉じる
+            check_and_close_popup(driver)
             time.sleep(30)
+            
             last_height = driver.execute_script("return document.body.scrollHeight")
             reload_counter = 0
 
@@ -356,6 +392,9 @@ def get_follower_count(driver, username):
         profile_url = f"https://www.threads.net/@{username}"
         driver.get(profile_url)
         logging.info(f"アカウント {username} のプロフィールページにアクセスしました: {profile_url}")
+
+        # ポップアップのチェックと閉じる
+        check_and_close_popup(driver)
 
         # フォロワー数を含む要素を待機して取得（英語と日本語に対応）
         follower_element = WebDriverWait(driver, 30).until(
@@ -437,6 +476,9 @@ def click_all_like_buttons(driver, post_url, total_likes, login_username, max_sc
     try:
         driver.get(new_post_url)
         logging.info(f"アカウント {login_username}:投稿ページにアクセスしています: {new_post_url}")
+
+        # ポップアップのチェックと閉じる
+        check_and_close_popup(driver)
 
         # 429エラーのチェックを追加
         if check_for_429_error(driver):
