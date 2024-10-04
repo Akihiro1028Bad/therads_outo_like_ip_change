@@ -29,6 +29,25 @@ def save_cookies(driver, username):
     except Exception as e:
         logging.error(f"ユーザー {username} のクッキー保存中にエラーが発生しました: {e}")
 
+def refresh_cookies(driver, username):
+    """
+    ドライバーに保存されているクッキーを更新する
+
+    :param driver: WebDriverオブジェクト
+    :param username: ユーザー名
+    """
+    cookie_path = get_cookie_file_path(username)
+    if os.path.exists(cookie_path):
+        with open(cookie_path, "rb") as file:
+            cookies = pickle.load(file)
+        for cookie in cookies:
+            try:
+                driver.add_cookie(cookie)
+            except Exception as e:
+                logging.warning(f"クッキーの追加中にエラーが発生しました: {str(e)}")
+    else:
+        logging.warning(f"ユーザー {username} のクッキーファイルが見つかりません。")
+
 def load_cookies(driver, username):
     """
     保存されたクッキーをロードする
